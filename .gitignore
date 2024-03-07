@@ -1,0 +1,7 @@
+*.tfstate.*
+*.tfstate
+*.lock.hcl
+/certs
+.terraform/
+.vscode/
+.DS_Store

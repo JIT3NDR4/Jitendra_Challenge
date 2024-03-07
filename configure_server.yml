@@ -1,0 +1,72 @@
+---
+- hosts: all
+  become: true
+  tasks:
+    - name: Update yum cache
+      yum:
+        name: '*'
+        state: latest
+
+    - name: Install Apache2
+      yum:
+        name: httpd
+        state: present
+
+    - name: Create Apache log directory
+      file:
+        path: /var/log/apache2
+        state: directory
+        owner: apache
+        group: apache
+        mode: '0755'
+
+    - name: Install SSL dependencies
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - mod_ssl
+        - openssl
+
+    - name: Generate self-signed SSL certificate
+      command: "openssl req -x509 -nodes -days 365 -newkey rsa:2048 -keyout /etc/pki/tls/private/apache.key -out /etc/pki/tls/certs/apache.crt -subj '/CN=localhost'"
+      args:
+        creates: /etc/pki/tls/certs/apache.crt
+
+    - name: Enable Apache2 mod_ssl
+      apache2_module:
+        name: ssl
+        state: present
+
+    - name: Disable default Apache site
+      apache2_module:
+        name: default
+        state: absent
+
+    - name: Create Virtual Host Configuration
+      template:
+        src: templates/vhost.conf.j2
+        dest: /etc/httpd/conf.d/web_server.conf
+
+    - name: Enable Apache2 service
+      systemd:
+        name: httpd
+        state: started
+        enabled: yes
+
+    - name: Copy static site content
+      copy:
+        src: index.html
+        dest: /var/www/html/index.html
+
+    - name: Disable HTTP access
+      lineinfile:
+        path: /etc/httpd/conf.d/web_server.conf
+        regexp: "^\\s*RedirectMatch"
+        state: absent
+
+    - name: Enable HTTPS access
+      lineinfile:
+        path: /etc/httpd/conf.d/web_server.conf
+        line: "    Redirect permanent / https://{{ ansible_fqdn }}/"
+        insertafter: EOF
